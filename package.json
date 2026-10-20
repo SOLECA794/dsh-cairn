@@ -1,0 +1,51 @@
+{
+  "name": "dsh-cairn",
+  "version": "0.1.0",
+  "description": "A cairn for dsh coding sessions: tells the agent which declared project check applies to the files it just changed, keeps a per-session ledger of what was verified against what was written, and carries decaying signals about fragile paths into the next session.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./core": "./lib/core.js",
+    "./ledger": "./lib/ledger.js",
+    "./pheromone": "./lib/pheromone.js",
+    "./remind": "./lib/remind.js",
+    "./verify": "./lib/verify.js"
+  },
+  "files": [
+    "lib",
+    "scripts",
+    "tests/stubs",
+    "cordis.patch.yml",
+    "dsh.plugin.json",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "verify": "node scripts/verify-apply.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "verification",
+    "ledger",
+    "session-memory",
+    "quality"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SOLECA794/dsh-cairn.git"
+  }
+}

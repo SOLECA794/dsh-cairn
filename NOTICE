@@ -1,0 +1,49 @@
+dsh-cairn
+Copyright (c) 2026 dsh-cairn contributors
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.
+
+This product contains code and design derived from the following
+Apache-2.0 licensed projects:
+
+  Tianshu-harness (https://github.com/huiliyi37/Tianshu-harness)
+  Copyright (c) Tianshu-harness contributors
+  Derived works:
+    - lib/verify.js
+        The idea of a repository declaring "touch X, therefore run Y" as data
+        rather than prose, the glob-to-command route shape, and the four
+        command kinds (test / build / typecheck / lint). The trust gate that
+        design needed is deliberately absent here because the capability it
+        gated — spawning the declared command — is also absent; see the file
+        header for why.
+    - lib/remind.js
+        The rule that a reminder must name files and commands rather than
+        advise a behaviour ("a reminder that says 'consider verifying your
+        changes' is worse than nothing"), and the per-block character budget.
+    - lib/pheromone.js
+        Decaying, reinforcing per-path signals shared across sessions, the
+        additive reinforcement rule, and the half-life table.
+    - lib/index.js
+        The `tools/post-execute` listener shape that prepends an
+        `additionalContexts` notice, and the reminder digest that suppresses a
+        repeat injection within one turn.
+
+  dsh-context-diet (https://github.com/SOLECA794/dsh-context-diet)
+  Copyright (c) dsh-context-diet contributors
+  Derived works:
+    - scripts/verify-apply.mjs and tests/stubs/dsh-tools.mjs
+        The module-hook stub pattern that lets `apply()` be exercised without
+        a DSH install, and the `check(label, fn)` reporting harness.
+
+  DeepSeek Harness (bundled `app.asar`)
+  Derived works:
+    - lib/index.js
+        The injected-notice message shape (`role: 'user'`, a labeled `source`
+        with `form: 'notice'` and a bounded `summary`), modelled on the
+        harness's own `repeat-tool-reminder` guard so an unlabeled context
+        cannot render as a user prompt in derived history.
+
+No code was copied verbatim from the projects above; the derivations are
+re-implementations of their published mechanisms, with the algorithms and
+threshold values preserved so the behaviour can be compared.

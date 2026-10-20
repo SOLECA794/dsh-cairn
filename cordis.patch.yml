@@ -1,0 +1,66 @@
+# dsh-cairn bundle patch.
+#
+# One row. Every knob is optional and the values written here are the shipped
+# defaults, kept in one place so a reader can see what is on without opening
+# lib/index.js.
+#
+# Cost note, because it is the whole trade: this plugin spends tokens. It
+# injects a few hundred characters when — and only when — something in the
+# session is unverified, and it buys a smaller chance of a confident "done"
+# that no check ever covered. `gate.mode: 'off'` stops the spending and keeps
+# the ledger; `enabled: false` stops everything.
+- insert:
+    - id: dsh-cairn
+      name: dsh-cairn
+      config:
+        # Master switch. Off means no listeners and no tools are registered.
+        enabled: true
+
+        # Whether to look for `.cairn/verify.json` at the project root at all.
+        # There is deliberately no user-global fallback: a route means "this
+        # repository wants this check", and inheriting one from ~ would make the
+        # same working tree behave differently on two machines.
+        verify: true
+
+        gate:
+          # remind — inject the notice, decide nothing.
+          # deny   — also refuse the tools listed below while the claim is
+          #          unsupported, with the reason in the denial.
+          # off    — silent; the ledger still runs.
+          mode: remind
+
+          # Tools whose invocation is a delivery claim. `present` is the one
+          # that ends the task, so it is the one worth holding.
+          tools:
+            - present
+
+          # Shell prefixes that are delivery claims too. Matched by prefix on
+          # the command string, so `git commit -m x` is held and `git log` is
+          # not.
+          commands:
+            - git commit
+            - git push
+
+        # Inject the readiness notice into the step after a tool result.
+        # Turning this off keeps the accounting and the gate, and removes the
+        # cost — useful when the gate alone is enough.
+        injectReadiness: true
+
+        pheromone:
+          # Cross-session signals ("this file broke three times last week").
+          enabled: true
+          # Persist them under $DSH_HOME/storages/dsh-cairn/, keyed per project
+          # root. Without this they die with the process.
+          persist: true
+
+        # Deposit signals automatically from what the session itself shows:
+        # a check that fails after a write, a path edited repeatedly
+        # (`fragileWrites`), a path read repeatedly (`entryPointReads`).
+        autoDeposit: true
+
+        # A file written this many times in one session is worth marking
+        # fragile. Below this, one flaky edit is noise.
+        fragileWrites: 3
+
+        # A path read this many times in one session is likely an entry point.
+        entryPointReads: 3

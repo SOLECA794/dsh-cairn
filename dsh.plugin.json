@@ -1,0 +1,13 @@
+{
+  "id": "dsh-cairn",
+  "version": "0.1.0",
+  "main": "./lib/index.js",
+  "description": "Marks the route for the next session: maps changed files to the checks the project declares in .cairn/verify.json, records which of them actually ran after which write, and persists decaying signals about fragile paths. It never executes anything.",
+  "engines": {
+    "dsh": ">=0.1.0-rc.1 <0.3.0-0"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": []
+  }
+}
