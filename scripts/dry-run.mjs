@@ -92,12 +92,15 @@ for (const file of files) {
 console.log(`changed   ${files.join(', ')}`)
 
 const routes = matchRoutes(files.map((f) => ({ path: f })), loaded.ok ? loaded.config.routes : [], { root })
-const hint = renderVerifyHint(loaded.ok ? loaded.config : { routes: [] })
 if (routes.length > 0) {
-  console.log('\nmatched routes')
+  console.log('\nmatched routes (these are what the notice will name)')
   for (const route of routes) console.log(`  ${route.match} → ${route.run}`)
-} else if (hint) {
-  console.log(`\n${hint}`)
+} else {
+  // Not injected: this is the `cairn_routes` answer, printed because a file no
+  // route claims is the case people get wrong. The notice itself never dumps
+  // the whole declaration — it names only the routes that matched.
+  const hint = renderVerifyHint(loaded.ok ? loaded.config : { routes: [] })
+  if (hint) console.log(`\nno route claims these files; the project declares:\n${hint}`)
 }
 
 /* One shell result, as the harness would hand it to `tools/post-execute`. */
