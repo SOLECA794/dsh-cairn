@@ -934,3 +934,74 @@ test('a pheromone is rendered into the notice for a changed file', async () => {
     rmSync(root, { recursive: true, force: true })
   }
 })
+
+/* ------------------------------------------------------------------ *
+ * ignore: what counts as a change this session made
+ * ------------------------------------------------------------------ */
+
+test('a scratch path the project ignores never enters the readiness list', async () => {
+  // Measured on a real kernel session: 121 of 163 injected notices named a
+  // throwaway script under a scratch directory, and the list only shows six
+  // files — so the source actually under change was the part that got cut.
+  const root = project({ test: 'cargo test', ignore: ['.rivet/**', 'target/**'] })
+  const harness = mockContext()
+  await cairn.apply(harness.ctx, {})
+  const agent = agentFor(root)
+
+  observeWrite(harness, agent, join(root, '.rivet', 'tools', 'probe_kernel_sie.py'))
+  observeWrite(harness, agent, join(root, 'target', 'debug', 'kernel'))
+  observeWrite(harness, agent, join(root, 'src', 'mm', 'memory_set.rs'))
+
+  // `ls`, not the declared check: a passing `cargo test` would verify the file
+  // and there would be nothing left to report.
+  const decision = await postExecute(harness, shellExec('ls', agent), { content: [{ type: 'text', text: 'ok' }] })
+  const [context] = decision.additionalContexts
+  const body = context.content[0].text
+  assert.match(body, /src\/mm\/memory_set\.rs/)
+  assert.doesNotMatch(body, /\.rivet/)
+  assert.doesNotMatch(body, /probe_kernel_sie/)
+  assert.doesNotMatch(body, /target\/debug/)
+
+  const status = await harness.tool('cairn_status').execute({}, { agent })
+  const value = status.value ?? status
+  assert.deepEqual(value.files.map((file) => file.path ?? file), ['src/mm/memory_set.rs'])
+})
+
+test('an ignored path does not hold the gate, and an unignored one still does', async () => {
+  const root = project({ ignore: ['.rivet/**'] })
+  const harness = mockContext()
+  await cairn.apply(harness.ctx, { gateMode: 'deny' })
+  const agent = agentFor(root)
+
+  observeWrite(harness, agent, join(root, '.rivet', 'tools', 'one_test.sh'))
+  const allowed = (await Promise.all(harness.fire('tools/pre-execute', {
+    name: 'present',
+    arguments: {},
+    agent,
+    callId: 'c1'
+  }, async () => ({ kind: 'allow' }))))[0]
+  assert.equal(allowed.kind, 'allow', 'scratch alone must not block a delivery claim')
+
+  observeWrite(harness, agent, join(root, 'src', 'net.rs'))
+  const denied = (await Promise.all(harness.fire('tools/pre-execute', {
+    name: 'present',
+    arguments: {},
+    agent,
+    callId: 'c2'
+  }, async () => ({ kind: 'allow' }))))[0]
+  assert.equal(denied.kind, 'deny')
+  assert.match(denied.reason, /src\/net\.rs/)
+})
+
+test('a project that declares no ignore still counts every write', async () => {
+  // The guard is a filter, not a default. Without a declaration, a scratch
+  // write is indistinguishable from source and must still be reported.
+  const root = project({ test: 'cargo test' })
+  const harness = mockContext()
+  await cairn.apply(harness.ctx, {})
+  const agent = agentFor(root)
+  observeWrite(harness, agent, join(root, '.rivet', 'tools', 'x.py'))
+
+  const decision = await postExecute(harness, shellExec('ls', agent), { content: [{ type: 'text', text: 'ok' }] })
+  assert.match(decision.additionalContexts[0].content[0].text, /\.rivet/)
+})

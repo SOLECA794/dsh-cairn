@@ -5,7 +5,7 @@ for [dsh](https://github.com/deepseek-ai/deepseek-harness) coding sessions — a
 *"was this change actually verified?"* a question with an answer, instead of a question the model
 answers about itself.
 
-Tested: **158 unit tests**, **24 `apply()` smoke checks** against a mock context, and a dry run on
+Tested: **169 unit tests**, **24 `apply()` smoke checks** against a mock context, and a dry run on
 a real repository.
 
 ## The problem
@@ -161,13 +161,15 @@ lib/remind.js       the reminder text and its budget
 lib/core.js         paths, globs, atomic writes, tag escaping
 scripts/verify-apply.mjs    end-to-end run of apply() with no DSH installed
 scripts/dry-run.mjs         what the plugin would say about your repository, without installing it
-tests/                      unit suites per module (158 tests) + the tool stub
+scripts/replay-cairn.mjs    replay a finished session through the real listeners, and count the cost
+scripts/verify-apply.mjs    drive apply() through a mock context, in session order
+tests/                      unit suites per module (169 tests) + the tool stub
 ```
 
 ## Development
 
 ```sh
-npm test        # 158 unit tests, node --test
+npm test        # 169 unit tests, node --test
 npm run verify  # 24 apply() checks: registration, gate, ledger, persistence
 ```
 
@@ -192,6 +194,28 @@ result passed in as a string, so nothing is executed — and prints the notice v
 character cost, the per-file ledger line, and the decision the gate would make. Point it at a
 repository with no `.cairn/verify.json` to see what it says when a project declares nothing.
 
+### Replay a session that already happened
+
+Installing the plugin needs a DSH restart, so the cost question is answered from the session log
+instead. This replays the recorded events of a real session through the plugin's own listeners —
+`fs/observed` is not in the log, so a `read`/`write`/`edit` call is replayed as the observation it
+produced, and each shell result goes to the real `tools/post-execute` listener:
+
+```sh
+node scripts/replay-cairn.mjs ~/.dsh/sessions/<slug>/session-<id>/session.v4.jsonl.zstd
+node scripts/replay-cairn.mjs <log> --gate deny    # count the delivery claims it would hold
+```
+
+It reports how many notices were injected, their total and mean character cost, what the gate would
+have refused, and how the changed files break down by area. Measured on one real 6-turn kernel
+session (1,208 tool calls, 1,173 of them shell/read/write/edit): **163 notices, 146,698 characters,
+mean 900**, gate `deny` would have held **1** delivery claim, and **121 of the 163 notices (74%)
+named a throwaway script under a scratch directory** rather than the source under change.
+
+That last number is the reason for the `ignore` list below. With four scratch globs declared for the
+same project, the same replay produces **120 notices, 110,860 characters, 0 of 120 naming scratch**,
+and the file breakdown flips from a scratch directory to `kernel-project/src`.
+
 ## Configuration
 
 See [cordis.patch.yml](cordis.patch.yml) for every knob, written out with the shipped default and
@@ -203,6 +227,31 @@ gate:
   tools: [present]
   commands: [git commit, git push]
 ```
+
+### Ignoring scratch
+
+The ledger counts a file as "changed by this session" when a write or edit is observed on it. Some of
+those writes are not the deliverable — a scratch directory another tool owns, build output, a
+session log. Left alone they crowd the readiness list, which shows six files, and the source you
+actually meant to verify is the part that gets cut.
+
+So the project declares its scratch as data, in the same file as its checks:
+
+```json
+{
+  "test": "cargo test",
+  "ignore": [".rivet/**", ".workbuddy/**", "target/**", "log/**"]
+}
+```
+
+Same grammar and same caps as `routes`: globs are validated at load time (a bad one is a config
+error, not a silent skip), deduplicated, capped at 64. An ignored path is still observed and still
+can produce a pheromone signal — it just never becomes a file *this session changed*, so it never
+holds the gate and never pushes real work off the list.
+
+There is deliberately no built-in default and no gitignore reader: cairn runs no `git` and spawns
+nothing, and a check that silently disappears because of a file you did not know existed is worse
+than one that is sometimes noisy. A project that declares no `ignore` gets every write counted.
 
 ## License
 

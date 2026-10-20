@@ -23,6 +23,7 @@ import {
   describeVerifyConfig,
   invalidateVerifyConfig,
   loadVerifyConfig,
+  isIgnored,
   matchRoutes,
   parseVerifyConfig,
   renderVerifyHint
@@ -286,4 +287,100 @@ test('renderVerifyHint is empty when nothing is declared and bounded otherwise',
   assert.match(hint, /… 4 more/)
   // The block is paid for on every request, so it must stay small.
   assert.ok(hint.length < 1200, `hint was ${hint.length} chars`)
+})
+
+/* ------------------------------------------------------------------ *
+ * ignore: paths that are not part of the deliverable
+ * ------------------------------------------------------------------ */
+
+test('ignore accepts globs, dedupes them, and survives on its own', () => {
+  const parsed = parseVerifyConfig({
+    test: 'cargo test',
+    ignore: ['.rivet/**', 'target/**', '.rivet/**']
+  })
+  assert.equal(parsed.ok, true)
+  assert.deepEqual(parsed.config.ignore, ['.rivet/**', 'target/**'])
+
+  const only = parseVerifyConfig({ ignore: ['scratch/**'] })
+  assert.equal(only.ok, true)
+  assert.deepEqual(only.config.ignore, ['scratch/**'])
+  assert.equal(describeVerifyConfig(only.config), 'ignore x1')
+})
+
+test('ignore is empty, not undefined, when nothing declares it', () => {
+  // Downstream code does `.length` on it; an undefined here is a crash in the
+  // observation path, which is the hottest path in the plugin.
+  assert.deepEqual(parseVerifyConfig({}).config.ignore, [])
+  assert.deepEqual(parseVerifyConfig(undefined).config.ignore, [])
+})
+
+test('a broken ignore entry is a config error, not a silent skip', () => {
+  // `null` is not a broken declaration — it is JSON's way of saying "not set",
+  // and it is accepted as an empty list, exactly like `routes`.
+  const asNull = parseVerifyConfig({ ignore: null })
+  assert.equal(asNull.ok, true)
+  assert.deepEqual(asNull.config.ignore, [])
+
+  for (const bad of ['scratch/**', 42, {}, true]) {
+    const parsed = parseVerifyConfig({ ignore: bad })
+    assert.equal(parsed.ok, false, `ignore: ${JSON.stringify(bad)} should be rejected`)
+    assert.match(parsed.reason, /ignore must be an array/)
+  }
+  for (const empty of ['', '   ', 42, ['nested']]) {
+    const parsed = parseVerifyConfig({ ignore: [empty] })
+    assert.equal(parsed.ok, false)
+    assert.match(parsed.reason, /ignore\[0\] must be a non-empty glob/)
+  }
+  // Only `**, *, ?` are special; everything else is escaped, so a bracket is a
+  // literal rather than an unterminated character class. That means the
+  // "invalid glob" branch is reachable only through `globToRegExp`'s
+  // non-string guard — pinned here so the behaviour is a decision, not a guess.
+  const literal = parseVerifyConfig({ ignore: ['src/[unclosed'] })
+  assert.equal(literal.ok, true)
+  assert.equal(isIgnored('src/[unclosed', literal.config), true)
+  assert.equal(isIgnored('src/u', literal.config), false)
+})
+
+test('ignore is capped like routes are', () => {
+  const over = Array.from({ length: VERIFY_DEFAULTS.maxIgnore + 1 }, (_, i) => `skip${i}/**`)
+  const parsed = parseVerifyConfig({ ignore: over })
+  assert.equal(parsed.ok, false)
+  assert.match(parsed.reason, /ignore has 65 entries; the cap is 64/)
+})
+
+test('a rejected config falls back to no ignore globs at all', () => {
+  const parsed = parseVerifyConfig({ ignore: ['.rivet/**'], test: 'cargo\ntest' })
+  assert.equal(parsed.ok, false)
+  assert.deepEqual(parsed.config.ignore, [])
+  assert.equal(isIgnored('.rivet/tools/probe.py', parsed.config), false)
+})
+
+test('isIgnored matches only what the globs claim', () => {
+  const config = parseVerifyConfig({ ignore: ['.rivet/**', 'target/**'] }).config
+  assert.equal(isIgnored('.rivet/tools/probe_kernel_sie.py', config), true)
+  assert.equal(isIgnored('.rivet/meridian.db-wal', config), true)
+  assert.equal(isIgnored('target/debug/kernel', config), true)
+  // The globs are anchored: a nested name that merely contains ".rivet" is
+  // source, and the whole point is that source still gets verified.
+  assert.equal(isIgnored('kernel-project/src/.rivet.rs', config), false)
+  assert.equal(isIgnored('kernel-project/src/mm/memory_set.rs', config), false)
+  assert.equal(isIgnored('src/target/release/x', config), false)
+})
+
+test('isIgnored tolerates a config that declares nothing, or nothing at all', () => {
+  assert.equal(isIgnored('a.rs', parseVerifyConfig({}).config), false)
+  assert.equal(isIgnored('a.rs', undefined), false)
+  assert.equal(isIgnored('a.rs', null), false)
+  assert.equal(isIgnored('a.rs', { ignore: 'not-an-array' }), false)
+  assert.equal(isIgnored('', parseVerifyConfig({ ignore: ['**'] }).config), false)
+})
+
+test('describeVerifyConfig reports the ignore count alongside the rest', () => {
+  const config = parseVerifyConfig({
+    test: 'cargo test',
+    build: 'make build',
+    routes: [{ match: 'src/kernel/**', run: 'make test-shell' }],
+    ignore: ['.rivet/**', 'target/**']
+  }).config
+  assert.equal(describeVerifyConfig(config), 'test/build + 1 route + ignore x2')
 })

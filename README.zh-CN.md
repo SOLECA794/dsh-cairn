@@ -4,7 +4,7 @@ cairn（石堆路标）是每个过路人往上添一块石头，让后来者能
 [dsh](https://github.com/deepseek-ai/deepseek-harness) 的编码会话做同样的事：把
 **「这次改动到底验证过没有」**变成一个可查询的事实，而不是模型对自己的陈述。
 
-已验证：**158 个单元测试**、**24 项 `apply()` 冒烟检查**（对着 mock context 跑），
+已验证：**169 个单元测试**、**24 项 `apply()` 冒烟检查**（对着 mock context 跑），
 并在真实仓库上做过一次 dry run。
 
 ## 要解决的问题
@@ -149,13 +149,14 @@ lib/remind.js       提醒文本与其预算
 lib/core.js         路径、glob、原子写入、标签转义
 scripts/verify-apply.mjs    没有安装 DSH 也能端到端跑一遍 apply()
 scripts/dry-run.mjs         装之前先看看它会对你的仓库说什么
-tests/                      每个模块的单元套件（158 个测试）+ 工具桩
+scripts/replay-cairn.mjs    把已发生的会话重放进真实监听器，实测成本
+tests/                      每个模块的单元套件（169 个测试）+ 工具桩
 ```
 
 ## 开发
 
 ```sh
-npm test        # 158 个单元测试，node --test
+npm test        # 169 个单元测试，node --test
 npm run verify  # 24 项 apply() 检查：注册、闸门、账本、持久化
 ```
 
@@ -175,6 +176,27 @@ node scripts/dry-run.mjs --root ../my-project --files src/net.rs --command "carg
 它会搭一个 mock context，重放你描述的那个会话 —— 哪些文件改了，以及一条以字符串传入的 shell 结果
 （所以什么都不会被执行）—— 然后原样打印出会注入的提醒、它的字符成本、按文件的账本行，
 以及闸门会下的判断。指向一个没有 `.cairn/verify.json` 的仓库，就能看到项目什么都没声明时它怎么说。
+
+### 重放一个已经发生过的会话
+
+装插件需要重启 DSH，所以「到底花多少」这个问题从会话日志来回答。下面这条命令把一个真实会话的
+事件流灌进插件自己的监听器 —— 日志里没有 `fs/observed`，所以一次 `read`/`write`/`edit` 调用会被
+还原成它当时产生的那次观测，每条 shell 结果都交给真正的 `tools/post-execute`：
+
+```sh
+node scripts/replay-cairn.mjs ~/.dsh/sessions/<slug>/session-<id>/session.v4.jsonl.zstd
+node scripts/replay-cairn.mjs <log> --gate deny    # 数一下它本来会拦下几次交付声明
+```
+
+它报出注入了几条提醒、总字符与均值、闸门会拦下什么，以及改动文件按目录的分布。在一个真实的
+6 轮内核会话上实测（1,208 次工具调用，其中 1,173 次是 shell/read/write/edit）：**163 条提醒、
+146,698 字符、均值 900**，`deny` 闸门会拦下 **1** 次交付声明，而 **163 条里有 121 条（74%）点名的
+是某个临时目录下的一次性脚本**，而不是真正在改的源码。
+
+这个数字就是下面 `ignore` 列表的由来。同一个项目声明了四个临时目录 glob 后，同一次重放变成
+**120 条提醒、110,860 字符、120 条里 0 条点名临时目录**，文件分布也从临时目录翻回
+`kernel-project/src`。
+
 ## 配置
 
 每个开关见 [cordis.patch.yml](cordis.patch.yml)，都写着发布的默认值以及为什么是那个值。
@@ -186,6 +208,29 @@ gate:
   tools: [present]
   commands: [git commit, git push]
 ```
+
+### 忽略临时产物
+
+只要观测到某个文件上有 write 或 edit，账本就把它算作「本次会话改过」。其中有些写入并不是交付物 ——
+别的工具拥有的临时目录、构建产物、会话日志。放任不管，它们会挤满只显示六个文件的待验证列表，
+被挤掉的恰好是你真正想验证的那部分源码。
+
+所以让项目像声明检查一样，把「什么算临时」也声明成数据，写在同一个文件里：
+
+```json
+{
+  "test": "cargo test",
+  "ignore": [".rivet/**", ".workbuddy/**", "target/**", "log/**"]
+}
+```
+
+语法和上限与 `routes` 一致：glob 在加载时校验（写错的 glob 是配置错误，不是静默跳过）、去重、
+上限 64 条。被忽略的路径仍然会被观测，也仍然能产生信息素信号 —— 它只是永远不会成为「本次会话
+改过的文件」，因此既拦不住闸门，也挤不掉真正的工作。
+
+这里刻意不做内置默认值、也不读 `.gitignore`：cairn 不跑 `git`、不 spawn 任何东西，而一项检查因为
+一个你根本不知道存在的文件而悄悄消失，比偶尔吵一点糟糕得多。没声明 `ignore` 的项目，每一次写入
+都被计入。
 
 ## 许可
 

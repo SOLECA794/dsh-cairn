@@ -29,7 +29,8 @@
   "scripts": {
     "test": "node --test tests/*.test.js",
     "verify": "node scripts/verify-apply.mjs",
-    "dry-run": "node scripts/dry-run.mjs"
+    "dry-run": "node scripts/dry-run.mjs",
+    "replay": "node scripts/replay-cairn.mjs"
   },
   "dsh": {
     "bundle": {
