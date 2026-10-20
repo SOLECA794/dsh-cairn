@@ -91,7 +91,8 @@ for (const file of files) {
 }
 console.log(`changed   ${files.join(', ')}`)
 
-const routes = matchRoutes(files.map((f) => ({ path: f })), loaded.ok ? loaded.config.routes : [], { root })
+// `matchRoutes` takes plain root-relative strings, not ledger entries.
+const routes = matchRoutes(files, loaded.ok ? loaded.config.routes : [], { root })
 if (routes.length > 0) {
   console.log('\nmatched routes (these are what the notice will name)')
   for (const route of routes) console.log(`  ${route.match} → ${route.run}`)
