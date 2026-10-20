@@ -340,6 +340,21 @@ async function main() {
     assert.match(off.warnings[0], /disabled by config/)
   })
 
+  /* ---- Packaging: the peer declaration is load-bearing ------------------ */
+  // Measured, not assumed: `dsh --profile <p> --dump-config` prints this bundle
+  // with or without the declaration, but booting that profile without it prints
+  // `failed to import: ERR_MODULE_NOT_FOUND: Cannot find package
+  // '@deepseek-ai/dsh-tools'` and the entry never activates — no error in the
+  // UI, no tool, nothing. The declaration is what makes the harness resolve the
+  // specifier for the plugin.
+  await check('package.json declares the @deepseek-ai/dsh-tools peer dependency', async () => {
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    const range = manifest.peerDependencies?.['@deepseek-ai/dsh-tools']
+    assert.equal(typeof range, 'string', 'peerDependencies must declare @deepseek-ai/dsh-tools')
+    assert.ok(range.trim().length > 0, 'the peer range must not be empty')
+    assert.equal(manifest.dsh?.bundle?.patch, './cordis.patch.yml')
+  })
+
   /* ---- Report ----------------------------------------------------------- */
 
   let failed = 0
