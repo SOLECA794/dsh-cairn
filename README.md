@@ -5,7 +5,7 @@ for [dsh](https://github.com/deepseek-ai/deepseek-harness) coding sessions — a
 *"was this change actually verified?"* a question with an answer, instead of a question the model
 answers about itself.
 
-Tested: **154 unit tests**, **24 `apply()` smoke checks** against a mock context, and a dry run on
+Tested: **158 unit tests**, **24 `apply()` smoke checks** against a mock context, and a dry run on
 a real repository.
 
 ## The problem
@@ -160,13 +160,14 @@ lib/pheromone.js    decaying cross-session signals, persisted atomically
 lib/remind.js       the reminder text and its budget
 lib/core.js         paths, globs, atomic writes, tag escaping
 scripts/verify-apply.mjs    end-to-end run of apply() with no DSH installed
-tests/                      unit suites per module (154 tests) + the tool stub
+scripts/dry-run.mjs         what the plugin would say about your repository, without installing it
+tests/                      unit suites per module (158 tests) + the tool stub
 ```
 
 ## Development
 
 ```sh
-npm test        # 154 unit tests, node --test
+npm test        # 158 unit tests, node --test
 npm run verify  # 24 apply() checks: registration, gate, ledger, persistence
 ```
 
@@ -175,6 +176,21 @@ npm run verify  # 24 apply() checks: registration, gate, ledger, persistence
 order — write a file, inject the notice, hold the gate, run a failing check, run the declared
 route, edit again, restart — because the seams are stateful and a broken link is only visible in
 sequence.
+
+### Try it on your project before installing it
+
+The plugin's entire output is one conditional block of text, so the honest way to evaluate it is to
+read that block for your own repository:
+
+```sh
+node scripts/dry-run.mjs --root ../my-project --files src/net.rs,src/dns.rs \
+    --command "cargo test" --exit 1
+```
+
+It builds a mock context, replays the session you describe — the files that changed, then one shell
+result passed in as a string, so nothing is executed — and prints the notice verbatim with its
+character cost, the per-file ledger line, and the decision the gate would make. Point it at a
+repository with no `.cairn/verify.json` to see what it says when a project declares nothing.
 
 ## Configuration
 

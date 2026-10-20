@@ -298,6 +298,94 @@ test('a failing check is recorded as failed, not as silence', async () => {
   }
 })
 
+test('a route check covers only the files its glob claims', async () => {
+  // The laundered-verification case: a subsystem check passes, and because it
+  // was recorded as global coverage a changed docs file inherits "verified"
+  // from a command that never reads the docs.
+  const root = project({
+    routes: [
+      { match: 'src/mm/**', run: 'make test-shell' },
+      { match: 'docs/**', run: 'make docs-check' }
+    ]
+  })
+  try {
+    const harness = mockContext()
+    await cairn.apply(harness.ctx, { pheromonePersist: false })
+    const agent = agentFor(root)
+    observeWrite(harness, agent, join(root, 'src', 'mm', 'paging.rs'))
+    observeWrite(harness, agent, join(root, 'docs', '01-index.md'))
+    await postExecute(harness, shellExec('make test-shell', agent), { content: [{ type: 'text', text: 'ok' }] })
+    const status = await harness.tool('cairn_status').execute({ verbose: true }, { agent })
+    const byPath = Object.fromEntries(status.files.map((file) => [file.path, file.status]))
+    assert.equal(byPath['src/mm/paging.rs'], 'passed')
+    assert.equal(byPath['docs/01-index.md'], 'unverified')
+    assert.equal(status.canDeliver, false)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a route check that names no changed file is not evidence', async () => {
+  const root = project({ routes: [{ match: 'src/mm/**', run: 'make test-shell' }] })
+  try {
+    const harness = mockContext()
+    await cairn.apply(harness.ctx, { pheromonePersist: false })
+    const agent = agentFor(root)
+    observeWrite(harness, agent, join(root, 'docs', '01-index.md'))
+    await postExecute(harness, shellExec('make test-shell', agent), { content: [{ type: 'text', text: 'ok' }] })
+    const status = await harness.tool('cairn_status').execute({}, { agent })
+    assert.deepEqual(status.verifications, [])
+    assert.equal(status.level, 'unverified')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('one command shared by several routes covers every file those routes claim', async () => {
+  const root = project({
+    routes: [
+      { match: 'src/mm/**', run: 'make test-shell' },
+      { match: 'src/driver/**', run: 'make test-shell' },
+      { match: 'docs/**', run: 'make docs-check' }
+    ]
+  })
+  try {
+    const harness = mockContext()
+    await cairn.apply(harness.ctx, { pheromonePersist: false })
+    const agent = agentFor(root)
+    observeWrite(harness, agent, join(root, 'src', 'mm', 'paging.rs'))
+    observeWrite(harness, agent, join(root, 'src', 'driver', 'uart.rs'))
+    observeWrite(harness, agent, join(root, 'docs', '01-index.md'))
+    await postExecute(harness, shellExec('make test-shell', agent), { content: [{ type: 'text', text: 'ok' }] })
+    const status = await harness.tool('cairn_status').execute({ verbose: true }, { agent })
+    const byPath = Object.fromEntries(status.files.map((file) => [file.path, file.status]))
+    assert.equal(byPath['src/mm/paging.rs'], 'passed')
+    assert.equal(byPath['src/driver/uart.rs'], 'passed')
+    assert.equal(byPath['docs/01-index.md'], 'unverified')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a declared kind stays project-wide even when routes exist', async () => {
+  // `cargo test` reads the whole tree; scoping it to a route glob would leave
+  // every other changed file permanently unverified.
+  const root = project({ test: 'cargo test', routes: [{ match: 'src/mm/**', run: 'make test-shell' }] })
+  try {
+    const harness = mockContext()
+    await cairn.apply(harness.ctx, { pheromonePersist: false })
+    const agent = agentFor(root)
+    observeWrite(harness, agent, join(root, 'src', 'mm', 'paging.rs'))
+    observeWrite(harness, agent, join(root, 'docs', '01-index.md'))
+    await postExecute(harness, shellExec('cargo test', agent), { content: [{ type: 'text', text: 'ok' }] })
+    const status = await harness.tool('cairn_status').execute({}, { agent })
+    assert.equal(status.level, 'verified')
+    assert.equal(status.canDeliver, true)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('an undeclared command is not a verification', async () => {
   const root = project({ test: 'npm test' })
   try {

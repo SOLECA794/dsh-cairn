@@ -4,7 +4,7 @@ cairn（石堆路标）是每个过路人往上添一块石头，让后来者能
 [dsh](https://github.com/deepseek-ai/deepseek-harness) 的编码会话做同样的事：把
 **「这次改动到底验证过没有」**变成一个可查询的事实，而不是模型对自己的陈述。
 
-已验证：**154 个单元测试**、**24 项 `apply()` 冒烟检查**（对着 mock context 跑），
+已验证：**158 个单元测试**、**24 项 `apply()` 冒烟检查**（对着 mock context 跑），
 并在真实仓库上做过一次 dry run。
 
 ## 要解决的问题
@@ -148,13 +148,14 @@ lib/pheromone.js    会衰减的跨会话信号，原子持久化
 lib/remind.js       提醒文本与其预算
 lib/core.js         路径、glob、原子写入、标签转义
 scripts/verify-apply.mjs    没有安装 DSH 也能端到端跑一遍 apply()
-tests/                      每个模块的单元套件（154 个测试）+ 工具桩
+scripts/dry-run.mjs         装之前先看看它会对你的仓库说什么
+tests/                      每个模块的单元套件（158 个测试）+ 工具桩
 ```
 
 ## 开发
 
 ```sh
-npm test        # 154 个单元测试，node --test
+npm test        # 158 个单元测试，node --test
 npm run verify  # 24 项 apply() 检查：注册、闸门、账本、持久化
 ```
 
@@ -163,6 +164,17 @@ npm run verify  # 24 项 apply() 检查：注册、闸门、账本、持久化
 写文件、注入提醒、拦下闸门、跑一个失败的检查、跑声明的路由、再编辑、重启 ——
 因为这些接缝是有状态的，断掉的环节只有在顺序里才看得见。
 
+### 装之前先在自己项目上试穿
+
+插件全部的产出就是一段条件触发的文本，所以评估它最诚实的方式，是先在你自己仓库上把那段文本读一遍：
+
+```sh
+node scripts/dry-run.mjs --root ../my-project --files src/net.rs --command "cargo test" --exit 1
+```
+
+它会搭一个 mock context，重放你描述的那个会话 —— 哪些文件改了，以及一条以字符串传入的 shell 结果
+（所以什么都不会被执行）—— 然后原样打印出会注入的提醒、它的字符成本、按文件的账本行，
+以及闸门会下的判断。指向一个没有 `.cairn/verify.json` 的仓库，就能看到项目什么都没声明时它怎么说。
 ## 配置
 
 每个开关见 [cordis.patch.yml](cordis.patch.yml)，都写着发布的默认值以及为什么是那个值。

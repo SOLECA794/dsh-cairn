@@ -28,7 +28,8 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "verify": "node scripts/verify-apply.mjs"
+    "verify": "node scripts/verify-apply.mjs",
+    "dry-run": "node scripts/dry-run.mjs"
   },
   "dsh": {
     "bundle": {
