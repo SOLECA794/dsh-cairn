@@ -1,66 +1,58 @@
 # dsh-cairn bundle patch.
 #
-# One row. Every knob is optional and the values written here are the shipped
-# defaults, kept in one place so a reader can see what is on without opening
-# lib/index.js.
+# ONE PLAIN INSERT ROW, ON PURPOSE.
+#
+# `dsh-market` can activate an installed plugin in the live process without a
+# restart — `hotMount()` in `dshmarket/lib/hot.js` imports the package and mounts
+# it into the running tree. It can only do that when this file parses as plain
+# `- insert:` / `id:` / `name:` rows; its `parseSimplePatch()` returns null on
+# ANY other line (a `config:` block, a disable row, an expression) and the market
+# then falls back to "restart required".
+#
+# So nothing is configured here. Every knob below already lives in
+# `lib/index.js` as its shipped default, and an explicit `config:` block would
+# REPLACE those defaults rather than extend them — which is how a knob silently
+# drifts away from the value the tests cover. To change one, pass it to
+# `apply(ctx, { … })` or edit the default in `lib/index.js`.
 #
 # Cost note, because it is the whole trade: this plugin spends tokens. It
 # injects a few hundred characters when — and only when — something in the
-# session is unverified, and it buys a smaller chance of a confident "done"
-# that no check ever covered. `gate.mode: 'off'` stops the spending and keeps
-# the ledger; `enabled: false` stops everything.
+# session is unverified, and it buys a smaller chance of a confident "done" that
+# no check ever covered. `gate.mode: 'off'` stops the spending and keeps the
+# ledger; `enabled: false` stops everything.
+#
+# The shipped defaults, for a reader who wants to see what is on:
+#
+#   enabled: true           master switch; off means no listeners, no tools
+#   verify: true            look for `.cairn/verify.json` at the project root
+#                           (no user-global fallback: a route means "this
+#                           repository wants this check", and inheriting one from
+#                           ~ would make one working tree behave differently on
+#                           two machines)
+#   gate.mode: remind       remind | deny | off. `remind` injects the notice and
+#                           decides nothing; `deny` also refuses the tools below
+#                           while the claim is unsupported, with the reason in
+#                           the denial; `off` is silent and keeps the ledger.
+#   gate.tools: [present]   tools whose invocation is a delivery claim. `present`
+#                           ends the task, so it is the one worth holding.
+#   gate.commands:          shell prefixes that are delivery claims too, matched
+#     [git commit, git push]  by prefix on the command string, so `git commit -m x`
+#                           is held and `git log` is not.
+#   injectReadiness: true   inject the readiness notice into the step after a
+#                           tool result. Off keeps the accounting and the gate and
+#                           removes the cost — useful when the gate alone suffices.
+#   pheromone.enabled: true cross-session signals ("this file broke three times
+#                           last week")
+#   pheromone.persist: true persist them under $DSH_HOME/storages/dsh-cairn/,
+#                           keyed per project root; without it they die with the
+#                           process
+#   autoDeposit: true       deposit signals from what the session itself shows: a
+#                           check that fails after a write, a path edited
+#                           repeatedly (`fragileWrites`), a path read repeatedly
+#                           (`entryPointReads`)
+#   fragileWrites: 3        written this many times in one session is worth
+#                           marking fragile; below it one flaky edit is noise
+#   entryPointReads: 3      read this many times is likely an entry point
 - insert:
     - id: dsh-cairn
       name: dsh-cairn
-      config:
-        # Master switch. Off means no listeners and no tools are registered.
-        enabled: true
-
-        # Whether to look for `.cairn/verify.json` at the project root at all.
-        # There is deliberately no user-global fallback: a route means "this
-        # repository wants this check", and inheriting one from ~ would make the
-        # same working tree behave differently on two machines.
-        verify: true
-
-        gate:
-          # remind — inject the notice, decide nothing.
-          # deny   — also refuse the tools listed below while the claim is
-          #          unsupported, with the reason in the denial.
-          # off    — silent; the ledger still runs.
-          mode: remind
-
-          # Tools whose invocation is a delivery claim. `present` is the one
-          # that ends the task, so it is the one worth holding.
-          tools:
-            - present
-
-          # Shell prefixes that are delivery claims too. Matched by prefix on
-          # the command string, so `git commit -m x` is held and `git log` is
-          # not.
-          commands:
-            - git commit
-            - git push
-
-        # Inject the readiness notice into the step after a tool result.
-        # Turning this off keeps the accounting and the gate, and removes the
-        # cost — useful when the gate alone is enough.
-        injectReadiness: true
-
-        pheromone:
-          # Cross-session signals ("this file broke three times last week").
-          enabled: true
-          # Persist them under $DSH_HOME/storages/dsh-cairn/, keyed per project
-          # root. Without this they die with the process.
-          persist: true
-
-        # Deposit signals automatically from what the session itself shows:
-        # a check that fails after a write, a path edited repeatedly
-        # (`fragileWrites`), a path read repeatedly (`entryPointReads`).
-        autoDeposit: true
-
-        # A file written this many times in one session is worth marking
-        # fragile. Below this, one flaky edit is noise.
-        fragileWrites: 3
-
-        # A path read this many times in one session is likely an entry point.
-        entryPointReads: 3
